@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Review Radar</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1b1f24;--muted:#6b7280;--border:#dfe3e8;--pos:#16a34a;--neg:#dc2626;--neu:#9ca3af;--ring:#cbd5e1;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1318;--card:#171c23;--text:#e8ebef;--muted:#8b95a3;--border:#2a323c;--pos:#4ade80;--neg:#f87171;--neu:#6b7280;--ring:#334155}}
+:root[data-theme="dark"]{--bg:#0f1318;--card:#171c23;--text:#e8ebef;--muted:#8b95a3;--border:#2a323c;--pos:#4ade80;--neg:#f87171;--neu:#6b7280;--ring:#334155}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:20px 16px}
+main{max-width:520px;margin:0 auto}
+h1{font-size:1.3rem;margin:0 0 4px}
+p.sub{margin:0 0 16px;color:var(--muted);font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+textarea{width:100%;min-height:110px;resize:vertical;border:1px solid var(--border);border-radius:10px;padding:10px;font:inherit;background:var(--bg);color:var(--text)}
+button{margin-top:10px;width:100%;padding:12px;border:0;border-radius:10px;font:inherit;font-weight:600;background:var(--text);color:var(--bg);cursor:pointer}
+.radar{position:relative;width:200px;height:200px;margin:20px auto 8px}
+.radar svg{width:100%;height:100%}
+.sweep{transform-origin:100px 100px;animation:spin 3s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.out{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:4.5rem;font-weight:800;color:var(--neu)}
+.out.pos{color:var(--pos)}.out.neg{color:var(--neg)}
+.note{text-align:center;color:var(--muted);font-size:.85rem;min-height:1.3em}
+.stats{margin-top:14px;border-top:1px solid var(--border);padding-top:14px}
+.row{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted);margin-bottom:6px}
+.row b{color:var(--text);font-size:1.1rem}
+.bar{height:10px;border-radius:99px;background:var(--border);overflow:hidden}
+.fill{height:100%;width:0;background:var(--neu);transition:width .5s,background .3s}
+.remark{margin-top:12px;font-size:.95rem;line-height:1.4}
+.ex{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.ex button{width:auto;margin:0;padding:6px 10px;font-weight:500;font-size:.8rem;background:transparent;color:var(--muted);border:1px solid var(--border)}
+</style>
+</head>
+<body>
+<main>
+<h1>📡 Review Radar</h1>
+<p class="sub">Paste a review. Positive shows <b>1</b>, negative shows <b>0</b>.</p>
+<div class="card">
+<textarea id="t" placeholder="e.g. The food was amazing and the staff were lovely."></textarea>
+<button id="go">Scan review</button>
+<div class="ex">
+<button data-e="Absolutely loved it, great quality and fast delivery!">Try positive</button>
+<button data-e="Terrible experience. Rude staff and the food was cold.">Try negative</button>
+<button data-e="Not good at all, would not recommend.">Try negation</button>
+</div>
+<div class="radar">
+<svg viewBox="0 0 200 200" aria-hidden="true">
+<circle cx="100" cy="100" r="96" fill="none" stroke="var(--ring)" stroke-width="2"/>
+<circle cx="100" cy="100" r="64" fill="none" stroke="var(--ring)"/>
+<circle cx="100" cy="100" r="32" fill="none" stroke="var(--ring)"/>
+<line x1="4" y1="100" x2="196" y2="100" stroke="var(--ring)"/><line x1="100" y1="4" x2="100" y2="196" stroke="var(--ring)"/>
+<g class="sweep"><path d="M100 100 L100 4 A96 96 0 0 1 150 17 Z" fill="var(--pos)" opacity=".18"/></g>
+</svg>
+<div class="out" id="out">–</div>
+</div>
+<div class="note" id="note">Waiting for a review…</div>
+<div class="stats">
+<div class="row"><span>Satisfaction</span><b id="pct">–</b></div>
+<div class="bar"><div class="fill" id="fill"></div></div>
+<div class="remark" id="remark">Remarks will appear here.</div>
+</div>
+</div>
+</main>
+<script>
+const POS="good great excellent amazing awesome love loved lovely perfect fantastic wonderful best happy delicious friendly helpful recommend recommended enjoy enjoyed enjoyable superb brilliant outstanding pleasant fast clean comfortable satisfied impressed nice beautiful fresh worth reliable quality easy smooth cheap affordable".split(" ");
+const NEG="bad terrible awful horrible worst hate hated poor disappointing disappointed disappointment rude slow dirty cold broken waste useless unhelpful refund overpriced expensive late never wrong cheap-looking mediocre bland stale noisy disgusting annoying annoyed angry problem problems defective fake scam avoid lacking unprofessional".split(" ");
+const NEGATE=new Set("not no never n't isnt wasnt dont didnt doesnt cant couldnt wont wouldnt hardly barely without".split(" "));
+const BOOST=new Set("very really extremely absolutely totally so super incredibly".split(" "));
+const P=new Set(POS),N=new Set(NEG);
+P.delete("cheap");
+function score(text){
+  const w=text.toLowerCase().replace(/[’']/g,"").replace(/[^a-z\s-]/g," ").split(/\s+/).filter(Boolean);
+  let s=0,hits=0;
+  w.forEach((x,i)=>{
+    let v=P.has(x)?1:N.has(x)?-1:0;
+    if(!v)return;
+    hits++;
+    for(let k=1;k<=3&&i-k>=0;k++){
+      if(NEGATE.has(w[i-k])){v=-v;break}
+    }
+    if(i>0&&BOOST.has(w[i-1]))v*=1.5;
+    s+=v;
+  });
+  if((text.match(/!/g)||[]).length&&s!==0)s+=Math.sign(s)*.25;
+  return{s,hits};
+}
+function run(){
+  const t=document.getElementById("t").value.trim();
+  const o=document.getElementById("out"),n=document.getElementById("note");
+  const pc=document.getElementById("pct"),f=document.getElementById("fill"),r=document.getElementById("remark");
+  const reset=(msg,rm)=>{o.textContent="–";o.className="out";n.textContent=msg;pc.textContent="–";f.style.width="0";f.style.background="var(--neu)";r.textContent=rm};
+  if(!t){reset("Enter a review first.","Remarks will appear here.");return}
+  const {s,hits}=score(t);
+  if(!hits||s===0){reset("No clear signal found. Try a longer review.","Not enough sentiment words to judge this review.");return}
+  const pos=s>0;
+  const p=Math.round(100/(1+Math.exp(-0.8*s)));
+  o.textContent=pos?"1":"0";
+  o.className="out "+(pos?"pos":"neg");
+  n.textContent=(pos?"Positive":"Negative")+" · score "+s.toFixed(2);
+  pc.textContent=p+"%";
+  f.style.width=p+"%";
+  f.style.background=pos?"var(--pos)":"var(--neg)";
+  let m;
+  if(p>=90)m="Excellent: the customer is delighted and would likely recommend.";
+  else if(p>=70)m="Good: the customer is mostly satisfied with their experience.";
+  else if(p>=50)m="Leaning positive: satisfied overall, but with some reservations.";
+  else if(p>=30)m="Leaning negative: noticeable dissatisfaction that needs attention.";
+  else if(p>=10)m="Poor: the customer is unhappy. Follow-up is recommended.";
+  else m="Very poor: strong dissatisfaction. Treat as a priority complaint.";
+  r.textContent=m;
+}
+document.getElementById("go").onclick=run;
+document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{document.getElementById("t").value=b.dataset.e;run()});
+</script>
+</body>
+</html>
